@@ -1,0 +1,5 @@
+test_inside
+test_outside
+*.d
+*.so
+*.pcm
