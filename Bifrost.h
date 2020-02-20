@@ -62,8 +62,10 @@ Bifrost::Bifrost(const std::string& img)
   }
 
   if(fork() == 0){
+    // Now in the chilld process
     std::cout << "Bifrost: Outside: starting " << img << std::endl;
 
+    // TODO allow args to be passed in
     std::vector<const char*> args = {"singularity", "exec",
                                      "-B", "/cvmfs:/cvmfs",
                                      "-B", (fDir+":/bifrost").c_str(),
