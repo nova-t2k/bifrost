@@ -3,6 +3,7 @@
 #include <fstream>
 #include <unistd.h>
 #include <iostream>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -13,9 +14,16 @@ class Bifrost
 {
 public:
   // For the host system to start a container
-  Bifrost(const std::string& img);
+  static std::unique_ptr<Bifrost> Outside(const std::string& img)
+  {
+    return std::unique_ptr<Bifrost>(new Bifrost(img));
+  }
+
   // For use inside the container
-  Bifrost();
+  static Bifrost* Inside()
+  {
+    return new Bifrost;
+  }
 
   ~Bifrost();
 
@@ -30,7 +38,17 @@ public:
   Bifrost(const Bifrost&) = delete;
   Bifrost& operator=(const Bifrost&) = delete;
 protected:
+  Bifrost(const std::string& img);
+  Bifrost();
+
   template<class T> void TypeCheck();
+
+  void WriteEncoded(int x);
+  void WriteEncoded(double x);
+
+  template<class T> T ReadEncoded();
+
+  bool fInside;
 
   std::string fDir;
   std::ofstream fOut;
@@ -44,12 +62,15 @@ template<class T, class U> T TypePun(U x)
   return p.t;
 }
 
-template<class T> char TypeTag();
-template<> char TypeTag<int>() {return 'I';}
-template<> char TypeTag<double>() {return 'D';}
+template<class T> std::string TypeTag();
+template<> std::string TypeTag<int>() {return "I";}
+template<> std::string TypeTag<double>() {return "D";}
+
+template<> std::string TypeTag<std::vector<int>>() {return "VI";}
+template<> std::string TypeTag<std::vector<double>>() {return "VD";}
 
 // ----------------------------------------------------------------------------
-Bifrost::Bifrost(const std::string& img)
+Bifrost::Bifrost(const std::string& img) : fInside(false)
 {
   fDir = "/tmp/bifrost.XXXXXX";
   mkdtemp(&fDir.front());
@@ -62,15 +83,13 @@ Bifrost::Bifrost(const std::string& img)
   }
 
   if(fork() == 0){
-    // Now in the chilld process
+    // Now in the child process
     std::cout << "Bifrost: Outside: starting " << img << std::endl;
 
-    // TODO allow args to be passed in
-    std::vector<const char*> args = {"singularity", "exec",
+    std::vector<const char*> args = {"singularity", "run",
                                      "-B", "/cvmfs:/cvmfs",
                                      "-B", (fDir+":/bifrost").c_str(),
-                                     img.c_str(),
-                                     "./inside.sh"};
+                                     img.c_str()};
     args.push_back(0); // null terminate
 
     execvp("singularity", (char**)&args.front());
@@ -97,7 +116,7 @@ Bifrost::Bifrost(const std::string& img)
 }
 
 // ----------------------------------------------------------------------------
-Bifrost::Bifrost() : fDir("/bifrost")
+Bifrost::Bifrost() : fInside(true), fDir("/bifrost")
 {
   // We have to open the streams here rather than in the initialization list
   // because we need control over the order to avoid deadlocks. NB the
@@ -120,7 +139,9 @@ Bifrost::Bifrost() : fDir("/bifrost")
 // ----------------------------------------------------------------------------
 Bifrost::~Bifrost()
 {
-  if(fDir != "/bifrost"){
+  fOut << "Q " << std::flush;
+
+  if(!fInside){
     unlink((fDir+"/pipe.in").c_str());
     unlink((fDir+"/pipe.out").c_str());
     rmdir(fDir.c_str());
@@ -128,9 +149,39 @@ Bifrost::~Bifrost()
 }
 
 // ----------------------------------------------------------------------------
+void Bifrost::WriteEncoded(int x)
+{
+  fOut << x << " ";
+}
+
+// ----------------------------------------------------------------------------
+void Bifrost::WriteEncoded(double x)
+{
+  fOut << TypePun<unsigned long long>(x) << " ";
+}
+
+// ----------------------------------------------------------------------------
+template<> int Bifrost::ReadEncoded<int>()
+{
+  int x;
+  fIn >> x;
+  return x;
+}
+
+// ----------------------------------------------------------------------------
+template<> double Bifrost::ReadEncoded<double>()
+{
+  unsigned long long ull;
+  fIn >> ull;
+  return TypePun<double>(ull);
+}
+
+// ----------------------------------------------------------------------------
 Bifrost& Bifrost::operator<<(int i)
 {
-  fOut << TypeTag<int>() << i << " " << std::flush;
+  fOut << TypeTag<int>() << " ";
+  WriteEncoded(i);
+  fOut << std::flush;
   return *this;
 }
 
@@ -145,7 +196,9 @@ Bifrost& Bifrost::operator>>(int& i)
 // ----------------------------------------------------------------------------
 Bifrost& Bifrost::operator<<(double x)
 {
-  fOut << TypeTag<double>() << TypePun<unsigned long long>(x) << " " << std::flush;
+  fOut << TypeTag<double>() << " ";
+  WriteEncoded(x);
+  fOut << std::flush;
   return *this;
 }
 
@@ -153,17 +206,16 @@ Bifrost& Bifrost::operator<<(double x)
 Bifrost& Bifrost::operator>>(double& x)
 {
   TypeCheck<double>();
-  unsigned long long ull;
-  fIn >> ull;
-  x = TypePun<double>(ull);
+  x = ReadEncoded<double>();
   return *this;
 }
 
 // ----------------------------------------------------------------------------
 template<class T> Bifrost& Bifrost::operator<<(const std::vector<T>& v)
 {
-  fOut << "V" << v.size() << " ";
-  for(const T& x: v) *this << x;
+  fOut << TypeTag<std::vector<T>>() << " " << v.size() << " ";
+  for(const T& x: v) WriteEncoded(x);
+  fOut.flush();
   return *this;
 }
 
@@ -174,21 +226,27 @@ template<class T> Bifrost& Bifrost::operator>>(std::vector<T>& v)
   size_t N;
   fIn >> N;
   v.reserve(N);
-  for(size_t i = 0; i < N; ++i){
-    T x;
-    fIn >> x;
-    v.push_back(x);
-  }
+  for(size_t i = 0; i < N; ++i) v.push_back(ReadEncoded<T>());
   return *this;
 }
 
 // ----------------------------------------------------------------------------
 template<class T> void Bifrost::TypeCheck()
 {
-  char tag;
+  std::string tag;
   fIn >> tag;
+
+  if(tag == "Q"){
+    std::cout << "Bifrost: Inside: received shutdown signal" << std::endl;
+    // TODO I guess this could be an exception? But the whole container is
+    // going away, so...
+    exit(0);
+  }
+
   if(tag != TypeTag<T>()){
-    std::cout << "Bifrost: Type error. Expected '" << TypeTag<T>()
+    std::cout << "Bifrost: "
+              << (fInside ? "Inside: " : "Outside: ")
+              << "Type error. Expected '" << TypeTag<T>()
               << "', got '" << tag << "'." << std::endl;
     abort();
   }
