@@ -86,8 +86,10 @@ Bifrost::Bifrost(const std::string& img) : fInside(false)
     // Now in the child process
     std::cout << "Bifrost: Outside: starting " << img << std::endl;
 
+    const std::string mount = fDir+":/bifrost";
+
     std::vector<const char*> args = {"singularity", "run",
-                                     "-B", (fDir+":/bifrost").c_str(),
+                                     "-B", mount.c_str(),
                                      img.c_str()};
     args.push_back(0); // null terminate
 
