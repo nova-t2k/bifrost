@@ -87,7 +87,6 @@ Bifrost::Bifrost(const std::string& img) : fInside(false)
     std::cout << "Bifrost: Outside: starting " << img << std::endl;
 
     std::vector<const char*> args = {"singularity", "run",
-                                     "-B", "/cvmfs:/cvmfs",
                                      "-B", (fDir+":/bifrost").c_str(),
                                      img.c_str()};
     args.push_back(0); // null terminate
