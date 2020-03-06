@@ -225,6 +225,7 @@ template<class T> Bifrost& Bifrost::operator>>(std::vector<T>& v)
   TypeCheck<std::vector<T>>();
   size_t N;
   fIn >> N;
+  v.clear();
   v.reserve(N);
   for(size_t i = 0; i < N; ++i) v.push_back(ReadEncoded<T>());
   return *this;
