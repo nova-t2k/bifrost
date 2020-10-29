@@ -14,9 +14,10 @@ class Bifrost
 {
 public:
   // For the host system to start a container
-  static std::unique_ptr<Bifrost> Outside(const std::string& img)
+  static std::unique_ptr<Bifrost> Outside(const std::string& img,
+                                          const std::string& args = "")
   {
-    return std::unique_ptr<Bifrost>(new Bifrost(img));
+    return std::unique_ptr<Bifrost>(new Bifrost(img, args));
   }
 
   // For use inside the container
@@ -37,8 +38,9 @@ public:
 
   Bifrost(const Bifrost&) = delete;
   Bifrost& operator=(const Bifrost&) = delete;
+
 protected:
-  Bifrost(const std::string& img);
+  Bifrost(const std::string& img, const std::string& args);
   Bifrost();
 
   template<class T> void TypeCheck();
@@ -70,7 +72,8 @@ template<> std::string TypeTag<std::vector<int>>() {return "VI";}
 template<> std::string TypeTag<std::vector<double>>() {return "VD";}
 
 // ----------------------------------------------------------------------------
-Bifrost::Bifrost(const std::string& img) : fInside(false)
+Bifrost::Bifrost(const std::string& img,
+                 const std::string& cmd_args) : fInside(false)
 {
   fDir = "/tmp/bifrost.XXXXXX";
   mkdtemp(&fDir.front());
@@ -88,9 +91,9 @@ Bifrost::Bifrost(const std::string& img) : fInside(false)
 
     const std::string mount = fDir+":/bifrost";
 
-    std::vector<const char*> args = {"singularity", "run", "--cleanenv",
+    std::vector<const char*> args = {"singularity", "exec", "--cleanenv",
                                      "-B", mount.c_str(),
-                                     img.c_str()};
+                                     img.c_str(), "bash", "/run.sh", cmd_args.c_str()};
     args.push_back(0); // null terminate
 
     execvp("singularity", (char**)&args.front());
