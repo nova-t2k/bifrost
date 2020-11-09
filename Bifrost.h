@@ -93,6 +93,10 @@ Bifrost::Bifrost(const std::string& img) : fInside(false)
                                      img.c_str()};
     args.push_back(0); // null terminate
 
+    // In NOvA setup gcc puts something bad in $LD_LIBRARY_PATH that breaks
+    // singularity. I don't think there are any valid reasons to allow this.
+    unsetenv("LD_LIBRARY_PATH");
+
     execvp("singularity", (char**)&args.front());
 
     std::cout << "Bifrost: Outside: failed to exec()" << std::endl;
