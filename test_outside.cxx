@@ -2,19 +2,29 @@
 
 int main()
 {
-  Bifrost bf("/home/bckhouse/containers/slf6.7-ssh.simg");
+  // change that to whatever the sif image after doing
+  // TMPDIR=/var/tmp singularity pull docker://novaexperiment/nova-sl7-novat2k:latest
+  auto bf = Bifrost::Outside("nova-sl7-novat2k_latest.sif");
+  std::vector<double> syst (58, 0.);
 
-  std::cout << "Outside: sending an int" << std::endl << std::flush;
-  bf << 42;
-  std::cout << "Outside: sending a double" << std::endl;
-  bf << 42.3;
+  // NOTE This is **NOT** the standard way to use bifrost, you should instanciate ReceiveLLHOverBifrost(*bf)
+  // and then use the ReceiveLLHOverBifrost::SetParameters(), SetOscParameters() and GetLikelihood() functions.
+  // This is for testing only.
+  // Sample code:
+  //    ReceiveLLHOverBifrost receiver(*bf);
+  //    receiver.SetParameters(kNOvAdet, syst);
+  //    receiver.SetOscParameter(OscPars);
+  //    double llh = receiver.GetLikelihood();
 
-  std::cout << "Outside: retrieving result" << std::endl;
-  double d;
-  bf >> d;
-  std::cout << "Ouside: got " << d << std::endl;
+  
+  // (*bf) << p.dm32 << p.dm21 << p.sth13 << p.sth12 << p.sth23 << p.dcp;
+  (*bf) << 2.41e-3 << 7.53e-5 << 2.18e-2 << .307 << 0.785 << 2.576;
+  (*bf) << syst;
+  
+  double llh;
+  (*bf) >> llh;
 
-  std::cout << "Outside: all done" << std::endl;
-
+  std::cout << "Likelihood returned is: " << llh << "\n";
+  
   return 0;
 }
