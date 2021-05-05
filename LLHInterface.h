@@ -25,13 +25,14 @@ void SendLLHOverBifrost(Bifrost& bf, TemplateLLHGetter* llh)
     bf >> p;
     llh->SetOscParameters(p);
 
-    unsigned int nsystvecs;
+    int nsystvecs;
     bf >> nsystvecs;
 
     for(unsigned int i = 0; i < nsystvecs; ++i){
       std::vector<double> systs;
       bf >> systs;
-      llh->SetParameters(i, systs);
+      CovTypes iCov = static_cast<CovTypes>(i);
+      llh->SetParameters(iCov, systs);
     }
 
     bf << llh->GetLikelihood();
@@ -64,7 +65,8 @@ public:
     fBF << fPars;
     // Bifrost doesn't have explicit support for vector<vector<double>>, just
     // send the size and then loop manually.
-    fBF << fSysts.size();
+    int size = fSysts.size();
+    fBF << size;
     for(const std::vector<double>& s: fSysts) fBF << s;
     double llh;
     fBF >> llh;
