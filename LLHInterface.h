@@ -20,13 +20,20 @@ Bifrost& operator<<(Bifrost& bf, OscPars& p)
 /// For use from inside the container
 void SendLLHOverBifrost(Bifrost& bf, TemplateLLHGetter* llh)
 {
-  OscPars p;
-  std::vector<double> systs;
-
   while(true){
-    bf >> p >> systs;
+    OscPars p;
+    bf >> p;
     llh->SetOscParameters(p);
-    llh->SetParameters(kNOvAdet, systs);
+
+    unsigned int nsystvecs;
+    bf >> nsystvecs;
+
+    for(unsigned int i = 0; i < nsystvecs; ++i){
+      std::vector<double> systs;
+      bf >> systs;
+      llh->SetParameters(i, systs);
+    }
+
     bf << llh->GetLikelihood();
   }
 }
@@ -43,7 +50,8 @@ public:
 
   void SetParameters(CovTypes iCov, std::vector<double> vals)
   {
-    fSysts = vals; // TODO ignoring iCov
+    if(fSysts.size() <= iCov) fSysts.resize(iCov+1);
+    fSysts[iCov] = vals;
   }
 
   void SetOscParameters(OscPars oscpars)
@@ -53,7 +61,11 @@ public:
 
   double GetLikelihood()
   {
-    fBF << fPars << fSysts;
+    fBF << fPars;
+    // Bifrost doesn't have explicit support for vector<vector<double>>, just
+    // send the size and then loop manually.
+    fBF << fSysts.size();
+    for(const std::vector<double>& s: fSysts) fBF << s;
     double llh;
     fBF >> llh;
     return llh;
@@ -62,6 +74,6 @@ public:
 protected:
   Bifrost& fBF;
 
-  std::vector<double> fSysts;
+  std::vector<std::vector<double>> fSysts;
   OscPars fPars;
 };
