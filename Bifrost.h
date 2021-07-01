@@ -14,9 +14,11 @@ class Bifrost
 {
 public:
   // For the host system to start a container
-  static std::unique_ptr<Bifrost> Outside(const std::string& img)
+  static std::unique_ptr<Bifrost> Outside(const std::string& img, 
+                                          const std::string& jf_mc_path="", 
+                                          const std::string& jf_data_path="")
   {
-    return std::unique_ptr<Bifrost>(new Bifrost(img));
+    return std::unique_ptr<Bifrost>(new Bifrost(img, jf_mc_path, jf_data_path));
   }
 
   // For use inside the container
@@ -38,7 +40,7 @@ public:
   Bifrost(const Bifrost&) = delete;
   Bifrost& operator=(const Bifrost&) = delete;
 protected:
-  Bifrost(const std::string& img);
+  Bifrost(const std::string& img, const std::string& jf_mc="", const std::string& jf_data="");
   Bifrost();
 
   template<class T> void TypeCheck();
@@ -70,7 +72,7 @@ template<> std::string TypeTag<std::vector<int>>() {return "VI";}
 template<> std::string TypeTag<std::vector<double>>() {return "VD";}
 
 // ----------------------------------------------------------------------------
-Bifrost::Bifrost(const std::string& img) : fInside(false)
+Bifrost::Bifrost(const std::string& img, const std::string& jf_mc, const std::string& jf_data) : fInside(false)
 {
   fDir = "/tmp/bifrost.XXXXXX";
   mkdtemp(&fDir.front());
@@ -89,8 +91,25 @@ Bifrost::Bifrost(const std::string& img) : fInside(false)
     const std::string mount = fDir+":/bifrost";
 
     std::vector<const char*> args = {"singularity", "run", "--cleanenv",
-                                     "-B", mount.c_str(),
-                                     img.c_str()};
+                                     "-B", mount.c_str()};
+
+    
+    std::string mc_dir; // mc_dir must be at this scope to be added to args
+    if(!jf_mc.empty()){
+      args.push_back("-B");
+      mc_dir = jf_mc+":/jf_mc";
+      args.push_back(mc_dir.c_str());
+    }
+
+    std::string data_dir;
+    if(!jf_data.empty()){
+      args.push_back("-B");
+      data_dir = jf_data+":/jf_data";
+      args.push_back(data_dir.c_str());
+    }
+
+    args.push_back(img.c_str());
+    
     args.push_back(0); // null terminate
 
     // In NOvA setup gcc puts something bad in $LD_LIBRARY_PATH that breaks
