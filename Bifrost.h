@@ -90,7 +90,7 @@ Bifrost::Bifrost(const std::string& img, const std::string& jf_data, const std::
 
     const std::string mount = fDir+":/bifrost";
 
-    std::vector<const char*> args = {"singularity", "run",
+    std::vector<const char*> args = {"singularity", "run", "--cleanenv",
                                      "-B", mount.c_str()};
 
     std::string data_dir;
