@@ -9,6 +9,7 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 class Bifrost
 {
@@ -82,6 +83,14 @@ Bifrost::Bifrost(const std::string& img, const std::string& jf_mc, const std::st
   if(ret != 0){
     std::cout << "Bifrost: Outside: Failed to make FIFOs" << std::endl;
     abort();
+  }
+
+  struct stat buf;
+  if(stat(img.c_str(), &buf) != 0){
+    std::cout << "Bifrost::Outside(): Container not found at path '" << img << "'" << std::endl;
+    abort();
+  } else {
+    std::cout << "Bifrost::Outside(): Container path is valid." << std::endl;
   }
 
   if(fork() == 0){
