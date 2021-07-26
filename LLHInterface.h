@@ -28,7 +28,7 @@ void SendLLHOverBifrost(Bifrost& bf, TemplateLLHGetter* llh)
     int nsystvecs;
     bf >> nsystvecs;
 
-    for(unsigned int i = 0; i < nsystvecs; ++i){
+    for(int i = 0; i < nsystvecs; ++i){
       std::vector<double> systs;
       bf >> systs;
       CovTypes iCov = static_cast<CovTypes>(i);
