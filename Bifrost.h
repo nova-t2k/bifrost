@@ -126,8 +126,8 @@ Bifrost::Bifrost(const std::string& img, const std::string& jf_mc, const std::st
   // alive in the thread function
   std::string* cmd = new std::string("singularity run --cleanenv -B " + mount);
 
-  if(!jf_mc.empty()) *cmd += "-B" + jf_mc + ":/jf_mc";
-  if(!jf_data.empty()) *cmd += "-B" + jf_data + ":/jf_data";
+  if(!jf_mc.empty()) *cmd += " -B" + jf_mc + ":/jf_mc";
+  if(!jf_data.empty()) *cmd += " -B" + jf_data + ":/jf_data";
 
   *cmd += " "+img;
 
