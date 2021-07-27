@@ -1,9 +1,11 @@
 #pragma once
 
+#include <cstdio>
 #include <fstream>
 #include <unistd.h>
 #include <iostream>
 #include <memory>
+#include <pthread.h>
 #include <string>
 #include <vector>
 
@@ -56,6 +58,8 @@ protected:
   std::string fDir;
   std::ofstream fOut;
   std::ifstream fIn;
+
+  pthread_t fThread; ///< Thread running singularity, outside only
 };
 
 template<class T, class U> T TypePun(U x)
@@ -72,6 +76,31 @@ template<> std::string TypeTag<double>() {return "D";}
 template<> std::string TypeTag<std::vector<int>>() {return "VI";}
 template<> std::string TypeTag<std::vector<double>>() {return "VD";}
 
+// We use a thread for this so that we can exit the whole process if we notice
+// singularity has exited, even if the main thread is in a blocking read/write.
+void* bifrost_thread_func(void* cmd)
+{
+  // In NOvA 'setup gcc' puts something bad in $LD_LIBRARY_PATH that breaks
+  // singularity. I don't think there are any valid reasons to allow this.
+  unsetenv("LD_LIBRARY_PATH");
+
+  FILE* p = popen((char*)cmd, "w");
+  if(!p){
+    std::cout << "Bifrost: Outside: failed to execute popen()" << std::endl;
+    abort();
+  }
+
+  int ret = pclose(p);
+  if(ret != 0){
+    std::cout << "Bifrost: Outside: container exited with error code " << ret << std::endl;
+    // This ends the entire process with this exit code
+    exit(ret);
+  }
+
+  // Otherwise this is likely a controlled shutdown
+  return 0;
+}
+
 // ----------------------------------------------------------------------------
 Bifrost::Bifrost(const std::string& img, const std::string& jf_mc, const std::string& jf_data) : fInside(false)
 {
@@ -87,47 +116,25 @@ Bifrost::Bifrost(const std::string& img, const std::string& jf_mc, const std::st
 
   struct stat buf;
   if(stat(img.c_str(), &buf) != 0){
-    std::cout << "Bifrost::Outside(): Container not found at path '" << img << "'" << std::endl;
+    std::cout << "Bifrost: Outside: Container not found at path '" << img << "'" << std::endl;
     abort();
-  } else {
-    std::cout << "Bifrost::Outside(): Container path is valid." << std::endl;
   }
 
-  if(fork() == 0){
-    // Now in the child process
-    std::cout << "Bifrost: Outside: starting " << img << std::endl;
+  const std::string mount = fDir+":/bifrost";
 
-    const std::string mount = fDir+":/bifrost";
+  // Allocate this on the heap as the easiest way to ensure it will still be
+  // alive in the thread function
+  std::string* cmd = new std::string("singularity run --cleanenv -B " + mount);
 
-    std::vector<const char*> args = {"singularity", "run", "--cleanenv",
-                                     "-B", mount.c_str()};
+  if(!jf_mc.empty()) *cmd += "-B" + jf_mc + ":/jf_mc";
+  if(!jf_data.empty()) *cmd += "-B" + jf_data + ":/jf_data";
 
-    // Must not go out of scope until after the execvp() call
-    std::string mc_dir;
-    if(!jf_mc.empty()){
-      args.push_back("-B");
-      mc_dir = jf_mc+":/jf_mc";
-      args.push_back(mc_dir.c_str());
-    }
+  *cmd += " "+img;
 
-    std::string data_dir;
-    if(!jf_data.empty()){
-      args.push_back("-B");
-      data_dir = jf_data+":/jf_data";
-      args.push_back(data_dir.c_str());
-    }
+  std::cout << "Bifrost: Outside: launching container with:\n  " << *cmd << std::endl;
 
-    args.push_back(img.c_str());
-
-    args.push_back(0); // null terminate
-
-    // In NOvA setup gcc puts something bad in $LD_LIBRARY_PATH that breaks
-    // singularity. I don't think there are any valid reasons to allow this.
-    unsetenv("LD_LIBRARY_PATH");
-
-    execvp("singularity", (char**)&args.front());
-
-    std::cout << "Bifrost: Outside: failed to exec()" << std::endl;
+  if(pthread_create(&fThread, 0, bifrost_thread_func, (void*)cmd->c_str()) != 0){
+    std::cout << "Bifrost: Outside: failed to start thread" << std::endl;
     abort();
   }
 
@@ -172,12 +179,15 @@ Bifrost::Bifrost() : fInside(true), fDir("/bifrost")
 // ----------------------------------------------------------------------------
 Bifrost::~Bifrost()
 {
-  fOut << "Q " << std::flush;
-
   if(!fInside){
+    std::cout << "Bifrost: Outside: sending shutdown signal" << std::endl;
+    fOut << "Q " << std::flush;
+
     unlink((fDir+"/pipe.in").c_str());
     unlink((fDir+"/pipe.out").c_str());
     rmdir(fDir.c_str());
+    pthread_join(fThread, 0);
+    std::cout << "Bifrost: Outside: Goodbye!" << std::endl;
   }
 }
 
@@ -271,7 +281,7 @@ template<class T> void Bifrost::TypeCheck()
   fIn >> tag;
 
   if(tag == "Q"){
-    std::cout << "Bifrost: Inside: received shutdown signal" << std::endl;
+    std::cout << "Bifrost: Inside: received shutdown signal. Goodbye!" << std::endl;
     // TODO I guess this could be an exception? But the whole container is
     // going away, so...
     exit(0);
