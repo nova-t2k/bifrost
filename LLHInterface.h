@@ -60,8 +60,27 @@ public:
     fPars = oscpars;
   }
 
+  //Setting Asimov parameters
+  void SetAsimovSystParameters(CovTypes iCov, std::vector<double> vals)
+  {
+    if(fAsimovSysts.size() <= iCov) fAsimovSysts.resize(iCov+1);
+    fAsimovSysts[iCov] = vals;
+  }
+
+  void SetAsimovOscParameters(OscPars oscpars)
+  {
+    fAsimovOscPars = oscpars;
+  }
+
   double GetLikelihood()
   {
+    fBF << fAsimovOscPars;
+    int syst_size = fAsimovSysts.size();
+    if(!syst_size) {
+      fBF << syst_size;
+      for(const std::vector<double>& s: fAsimovSysts) fBF << s;
+    }
+
     fBF << fPars;
     // Bifrost doesn't have explicit support for vector<vector<double>>, just
     // send the size and then loop manually.
@@ -77,5 +96,8 @@ protected:
   Bifrost& fBF;
 
   std::vector<std::vector<double>> fSysts;
+  std::vector<std::vector<double>> fAsimovSysts;
   OscPars fPars;
+  OscPars fAsimovOscPars;
+
 };
