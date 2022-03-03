@@ -21,6 +21,26 @@ Bifrost& operator<<(Bifrost& bf, OscPars& p)
 void SendLLHOverBifrost(Bifrost& bf, TemplateLLHGetter* llh)
 {
   while(true){
+    //send asimov osc pars
+    OscPars asimovOscPars;
+    int gotSentAsimovOsc;
+
+    bf >> gotSentAsimovOsc;
+
+    if(gotSentAsimovOsc) {
+      bf >> asimovOscPars;
+      llh->SetAsimovOscParameters(asimovOscPars);
+    }
+    int nasimovsystvecs;
+    bf >> nasimovsystvecs;
+
+    for(int i = 0; i < nasimovsystvecs; ++i){
+      std::vector<double> asimovsysts;
+      bf >> asimovsysts;
+      CovTypes iCov = static_cast<CovTypes>(i);
+      llh->SetAsimovSystParameters(iCov, asimovsysts);
+    }
+
     OscPars p;
     bf >> p;
     llh->SetOscParameters(p);
@@ -43,7 +63,7 @@ void SendLLHOverBifrost(Bifrost& bf, TemplateLLHGetter* llh)
 class ReceiveLLHOverBifrost : public TemplateLLHGetter
 {
 public:
-  ReceiveLLHOverBifrost(Bifrost& bf) : fBF(bf)
+  ReceiveLLHOverBifrost(Bifrost& bf) : fBF(bf), fSendAsimovOsc(false)
   {
   }
 
@@ -70,16 +90,19 @@ public:
   void SetAsimovOscParameters(OscPars oscpars)
   {
     fAsimovOscPars = oscpars;
+    fSendAsimovOsc = true;
   }
 
   double GetLikelihood()
   {
-    fBF << fAsimovOscPars;
+
+    fBF << int(fSendAsimovOsc);
+
+    if(fSendAsimovOsc) fBF << fAsimovOscPars;
     int syst_size = fAsimovSysts.size();
-    if(!syst_size) {
-      fBF << syst_size;
-      for(const std::vector<double>& s: fAsimovSysts) fBF << s;
-    }
+
+    fBF << syst_size;
+    for(const std::vector<double>& s: fAsimovSysts) fBF << s;
 
     fBF << fPars;
     // Bifrost doesn't have explicit support for vector<vector<double>>, just
@@ -89,6 +112,9 @@ public:
     for(const std::vector<double>& s: fSysts) fBF << s;
     double llh;
     fBF >> llh;
+
+    fSendAsimovOsc = false;
+    fAsimovSysts.clear();
     return llh;
   }
 
@@ -99,5 +125,6 @@ protected:
   std::vector<std::vector<double>> fAsimovSysts;
   OscPars fPars;
   OscPars fAsimovOscPars;
+  bool fSendAsimovOsc;
 
 };
