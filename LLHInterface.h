@@ -22,23 +22,26 @@ void SendLLHOverBifrost(Bifrost& bf, TemplateLLHGetter* llh)
 {
   while(true){
     //send asimov osc pars
-    OscPars asimovOscPars;
     int gotSentAsimovOsc;
-
     bf >> gotSentAsimovOsc;
 
     if(gotSentAsimovOsc) {
+      OscPars asimovOscPars;
       bf >> asimovOscPars;
       llh->SetAsimovOscParameters(asimovOscPars);
     }
+
+    int gotSentAsimovSysts;
+    bf >> gotSentAsimovSysts;
+
     int nasimovsystvecs;
     bf >> nasimovsystvecs;
 
     for(int i = 0; i < nasimovsystvecs; ++i){
-      std::vector<double> asimovsysts;
-      bf >> asimovsysts;
-      CovTypes iCov = static_cast<CovTypes>(i);
-      llh->SetAsimovSystParameters(iCov, asimovsysts);
+       std::vector<double> asimovsysts;
+       bf >> asimovsysts;
+       CovTypes iCov = static_cast<CovTypes>(i);
+       llh->SetAsimovSystParameters(iCov, asimovsysts);
     }
 
     OscPars p;
@@ -63,7 +66,7 @@ void SendLLHOverBifrost(Bifrost& bf, TemplateLLHGetter* llh)
 class ReceiveLLHOverBifrost : public TemplateLLHGetter
 {
 public:
-  ReceiveLLHOverBifrost(Bifrost& bf) : fBF(bf), fSendAsimovOsc(false)
+  ReceiveLLHOverBifrost(Bifrost& bf) : fBF(bf), fSendAsimovOsc(false), fSendAsimovSysts(false)
   {
   }
 
@@ -85,6 +88,7 @@ public:
   {
     if(fAsimovSysts.size() <= iCov) fAsimovSysts.resize(iCov+1);
     fAsimovSysts[iCov] = vals;
+    fSendAsimovSysts = true;
   }
 
   void SetAsimovOscParameters(OscPars oscpars)
@@ -97,12 +101,13 @@ public:
   {
 
     fBF << int(fSendAsimovOsc);
-
     if(fSendAsimovOsc) fBF << fAsimovOscPars;
-    int syst_size = fAsimovSysts.size();
 
-    fBF << syst_size;
-    for(const std::vector<double>& s: fAsimovSysts) fBF << s;
+    if(fSendAsimovSysts) {
+      fBF << int(fAsimovSysts.size());
+      for(const std::vector<double>& s: fAsimovSysts) fBF << s;
+    }
+    else fBF << 0; //equivalent to an empty fAsimovSysts.size()
 
     fBF << fPars;
     // Bifrost doesn't have explicit support for vector<vector<double>>, just
@@ -113,8 +118,8 @@ public:
     double llh;
     fBF >> llh;
 
-    fSendAsimovOsc = false;
-    fAsimovSysts.clear();
+    fSendAsimovOsc = fSendAsimovSysts = false;
+    //fAsimovSysts.clear();
     return llh;
   }
 
@@ -126,5 +131,6 @@ protected:
   OscPars fPars;
   OscPars fAsimovOscPars;
   bool fSendAsimovOsc;
+  bool fSendAsimovSysts;
 
 };
