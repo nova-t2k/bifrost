@@ -31,9 +31,6 @@ void SendLLHOverBifrost(Bifrost& bf, TemplateLLHGetter* llh)
       llh->SetAsimovOscParameters(asimovOscPars);
     }
 
-    int gotSentAsimovSysts;
-    bf >> gotSentAsimovSysts;
-
     int nasimovsystvecs;
     bf >> nasimovsystvecs;
 
@@ -119,7 +116,6 @@ public:
     fBF >> llh;
 
     fSendAsimovOsc = fSendAsimovSysts = false;
-    //fAsimovSysts.clear();
     return llh;
   }
 
