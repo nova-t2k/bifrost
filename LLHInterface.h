@@ -41,6 +41,33 @@ void SendLLHOverBifrost(Bifrost& bf, TemplateLLHGetter* llh)
        llh->SetAsimovSystParameters(iCov, asimovsysts);
     }
 
+    //send poisson data parameters
+    int gotSentPoissonFakeDataOsc;
+    bf >> gotSentPoissonFakeDataOsc;
+
+    if(gotSentPoissonFakeDataOsc) {
+      OscPars poissonFakeDataOscPars;
+      bf >> poissonFakeDataOscPars;
+      llh->SetPoissonFakeDataOscParameters(poissonFakeDataOscPars);
+    }
+
+    int npoissonFakeDatasystvecs;
+    bf >> npoissonFakeDatasystvecs;
+
+    for(int i = 0; i < npoissonFakeDatasystvecs; ++i){
+       std::vector<double> poissonFakeDatasysts;
+       bf >> poissonFakeDatasysts;
+       CovTypes iCov = static_cast<CovTypes>(i);
+       llh->SetPoissonFakeDataSystParameters(iCov, poissonFakeDatasysts);
+    }
+
+    //instruction to reset to the original data file
+    int gotSentResetToDataFile;
+    bf >> gotSentResetToDataFile;
+    if(gotSentResetToDataFile) {
+      llh->ResetToDataFile();
+    }
+
     OscPars p;
     bf >> p;
     llh->SetOscParameters(p);
@@ -63,7 +90,8 @@ void SendLLHOverBifrost(Bifrost& bf, TemplateLLHGetter* llh)
 class ReceiveLLHOverBifrost : public TemplateLLHGetter
 {
 public:
-  ReceiveLLHOverBifrost(Bifrost& bf) : fBF(bf), fSendAsimovOsc(false), fSendAsimovSysts(false)
+  ReceiveLLHOverBifrost(Bifrost& bf) : fBF(bf), fSendAsimovOsc(false), fSendAsimovSysts(false),
+    fSendPoissonFakeDataOsc(false), fSendPoissonFakeDataSysts(false), fResetToDataFile(false)
   {
   }
 
@@ -94,6 +122,25 @@ public:
     fSendAsimovOsc = true;
   }
 
+  //Setting parameters for Poisson fake data
+  void SetPoissonFakeDataSystParameters(CovTypes iCov, std::vector<double> vals)
+  {
+    if(fPoissonFakeDataSysts.size() <= iCov) fPoissonFakeDataSysts.resize(iCov+1);
+    fPoissonFakeDataSysts[iCov] = vals;
+    fSendPoissonFakeDataSysts = true;
+  }
+
+  void SetPoissonFakeDataOscParameters(OscPars oscpars)
+  {
+    fPoissonFakeDataOscPars = oscpars;
+    fSendPoissonFakeDataOsc = true;
+  }
+
+  void ResetToDataFile()
+  {
+    fResetToDataFile = true;
+  }
+
   double GetLikelihood()
   {
 
@@ -106,6 +153,18 @@ public:
     }
     else fBF << 0; //equivalent to an empty fAsimovSysts.size()
 
+
+    fBF << int(fSendPoissonFakeDataOsc);
+    if(fSendPoissonFakeDataOsc) fBF << fPoissonFakeDataOscPars;
+
+    if(fSendPoissonFakeDataSysts) {
+      fBF << int(fPoissonFakeDataSysts.size());
+      for(const std::vector<double>& s: fPoissonFakeDataSysts) fBF << s;
+    }
+    else fBF << 0;
+
+    fBF << int(fResetToDataFile);
+
     fBF << fPars;
     // Bifrost doesn't have explicit support for vector<vector<double>>, just
     // send the size and then loop manually.
@@ -116,6 +175,9 @@ public:
     fBF >> llh;
 
     fSendAsimovOsc = fSendAsimovSysts = false;
+    fSendPoissonFakeDataOsc = fSendPoissonFakeDataSysts = false;
+    fResetToDataFile = false;
+
     return llh;
   }
 
@@ -123,10 +185,17 @@ protected:
   Bifrost& fBF;
 
   std::vector<std::vector<double>> fSysts;
-  std::vector<std::vector<double>> fAsimovSysts;
   OscPars fPars;
+
+  std::vector<std::vector<double>> fAsimovSysts;
   OscPars fAsimovOscPars;
   bool fSendAsimovOsc;
   bool fSendAsimovSysts;
 
+  std::vector<std::vector<double>> fPoissonFakeDataSysts;
+  OscPars fPoissonFakeDataOscPars;
+  bool fSendPoissonFakeDataOsc;
+  bool fSendPoissonFakeDataSysts;
+
+  bool fResetToDataFile;
 };
