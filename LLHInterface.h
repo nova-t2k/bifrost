@@ -90,11 +90,15 @@ public:
   void SetDataToAsimov()
   {
     fSetDataToAsimov = true;
+    fResetToDataFile = false;
+    fSetDataToPoissonStatFluctuations = false;
   }
 
   void SetDataToPoissonStatFluctuations()
   {
     fSetDataToPoissonStatFluctuations = true;
+    fSetDataToAsimov = false;
+    fResetToDataFile = false;
   }
 
   void ForceDummyLikelihood()
@@ -102,9 +106,12 @@ public:
     fSkipLLHCalculation = true;
     this->GetLikelihood();
   }
+
   void ResetToDataFile()
   {
     fResetToDataFile = true;
+    fSetDataToAsimov = false;
+    fSetDataToPoissonStatFluctuations = false;
   }
 
   double GetLikelihood()
